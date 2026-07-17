@@ -110,9 +110,12 @@ LIBC=$(ldd target/release/portspy | awk '/libc.so/{print $3}')
 nm -D "$LIBC" | grep -Ew 'getpwuid|geteuid'
 ```
 Your binary shows `U getpwuid` — a **hole**, "I call this but don't have it."
-libc shows `T getpwuid` at some address — the **real machine code**. At startup,
-the dynamic linker patches your hole to point at libc's address. After that,
-calling `getpwuid` is just a jump to that address.
+libc shows `T getpwuid` at some address — the **real machine code**. (`geteuid`
+may show as `W` = a *weak* definition; still real code, just overridable — treat
+`T` and `W` the same for our purposes.) The dynamic linker patches your hole to
+point at libc's address — often *lazily*, the first time you actually call it,
+via a small jump table. After that, calling `getpwuid` is just a jump to that
+address.
 
 > 🧭 **Side quest (C/OS): what's a "shared library" / "dynamic linking"?**
 > A shared library (`.so` on Linux, `.dll` on Windows, `.dylib` on macOS) is

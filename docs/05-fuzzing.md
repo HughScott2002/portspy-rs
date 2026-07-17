@@ -52,8 +52,20 @@ cargo fuzz init                   # creates crates/portspy-model/fuzz/
 functions are public and eat untrusted text. **From here on, run every
 `cargo fuzz ...` command from inside `crates/portspy-model/`.**
 
-You should now have `crates/portspy-model/fuzz/`, and `cargo fuzz list` prints
-the target list without error.
+You should now have `crates/portspy-model/fuzz/`.
+
+**One more setup step (or `cargo fuzz` will error).** Our root `Cargo.toml` has an
+explicit `members = [...]` list, and the new `fuzz` crate isn't in it — cargo will
+complain the package "believes it's in a workspace when it's not." Make the fuzz
+crate its own standalone workspace by adding one line to the **top** of
+`crates/portspy-model/fuzz/Cargo.toml`:
+```toml
+[workspace]
+```
+(That empty `[workspace]` table tells cargo "this crate stands alone." Newer
+cargo-fuzz can do this for you with `cargo fuzz init --fuzzing-workspace=true`.)
+
+Now `cargo fuzz list` prints the target list without error.
 
 > 🆘 If `cargo install cargo-fuzz` fails to build, you may need LLVM/clang
 > installed (`sudo apt install clang`). libFuzzer ships with the Rust nightly
@@ -140,11 +152,15 @@ challenges:
   fuzzing `parse_listening` exercises it **for free**. See if any slice panics.
 - **The 8-column assumption** in `wire::decode`: lines with 7 or 9 tabs should be
   skipped cleanly (this one's already covered by your `decode_wire` target).
-- **`request_path`** (in `portspy-http`) is another good target, but it's a
-  private fn — you'd expose it the same way first. Optional; save it for later.
+- **`request_path`** (in `portspy-http`) is another good target, but it's a fully
+  *private* fn (not even `pub`), so exposing it takes an extra step: change it to
+  `pub` (or add a tiny public wrapper), then re-export it from that crate's
+  `lib.rs`. Optional; save it for later.
 
 > If the fuzzer finds **nothing** after a good run, that's a genuine result too —
-> a cheap proof that path is robust. "No bug found" is information, not failure.
+> real **evidence** (over the paths and inputs it explored) that the parser
+> holds up. It's not a *proof* of no bugs — a finite run can't prove absence —
+> but "no crash found" is information, not failure.
 
 ### When it *does* find something
 libFuzzer saves the crashing input to a file (under `fuzz/artifacts/...`) and
@@ -178,7 +194,10 @@ it once; the test stops it coming back.
   infinite loop; keep the target body tiny and pure (parse only).
 
 ## Commit it
+You've been working inside `crates/portspy-model/` — **head back to the repo root
+first**, since the next lesson (and `make`) run from there:
 ```sh
+cd ../..     # back to the repo root
 git add -A && git commit -m "lesson 5: cargo-fuzz targets for the parsers (+ regression tests)"
 ```
 

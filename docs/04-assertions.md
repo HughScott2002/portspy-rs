@@ -94,11 +94,18 @@ back a *truncated* path (`/glue`), which 404s; if the packet were cut even
 earlier (before the path), it falls back to `/` and serves the wrong page. Either
 way you acted on half a request. TigerStyle: **assert your assumptions or handle
 them.** Pick:
-- **Enforce (easier):** after reading, check the buffer actually contains a full
-  request line (a `\r\n`). If not, send a 400 — you already have the helper, just
-  call it:
+- **Enforce (easier):** right after the read (before you route), bail out if the
+  request line isn't complete. The `return` matters — otherwise you'd send a 400
+  *and then* keep routing and try to send a second response:
   ```rust
-  respond(&mut stream, "400 Bad Request", "text/plain; charset=utf-8", b"bad request")
+  if !request_text.contains("\r\n") {
+      return respond(
+          &mut stream,
+          "400 Bad Request",
+          "text/plain; charset=utf-8",
+          b"bad request",
+      );
+  }
   ```
 - **Handle (harder, optional):** loop the read, appending into the buffer until
   you see `\r\n` or hit `MAX_REQUEST_BYTES`, then 400. More correct, more code —

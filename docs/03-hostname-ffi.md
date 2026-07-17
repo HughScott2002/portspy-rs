@@ -88,33 +88,45 @@ Tell Rust that `gethostname` exists out in libc — the same kind of `extern`
 promise already sitting in `ffi.rs` for `getpwuid`. Add your declaration to that
 same `unsafe extern "C"` block. Two translation puzzles:
 
-- `char *name`: is that pointer `*const u8`/`*const c_char` or `*mut ...`? Ask
-  yourself **who writes through it** — you, or C? (This is *the* decision of the
-  lesson. Get it wrong and the compiler will tell you.)
+- `char *name`: is that pointer `*const c_char` or `*mut c_char`? Ask yourself
+  **who writes through it** — you, or C? (This is *the* decision of the lesson.)
+- the **return type** `int`: C's `int` maps to `std::os::raw::c_int` (which is
+  `i32` on this machine, but write `c_int` — it documents "this is C's int"). The
+  existing declarations in `ffi.rs` return a pointer and a `u32`, so this one's
+  new — you'll add `use std::os::raw::c_int;` (next to the existing
+  `use std::os::raw::c_char;`).
 - `size_t`: the Rust type for "an unsigned, pointer-sized length" is **`usize`**
   — the same one `portspy-wasm`'s `alloc(len: usize)` uses. Use that. (The *why*
   — that it's sized to the machine's pointer width — is the thing worth
   understanding; the answer is just `usize`.)
 
-> ⚠️ **Trap — `*const` vs `*mut`.** `*const` = "I promise only to read through
-> this." `*mut` = "I may write through this." C *writes* the hostname into your
-> buffer. Lend it a `*const` and you've lied; the compiler (or worse, runtime)
-> will object. This one's worth getting from first principles, not guessing.
+> ⚠️ **Trap — `*const` vs `*mut`.** `*const` = "only read through this." `*mut` =
+> "may write through this." C *writes* the hostname into your buffer, so it must
+> be `*mut c_char`. Important honesty: Rust **cannot check your `extern`
+> declaration against C's real signature** — it trusts you. So declaring `*const`
+> here wouldn't reliably produce a compiler error (a `*mut` can be coerced to
+> `*const`); it would just be a *lie* that lets C write through a pointer you
+> promised was read-only — exactly the kind of silent bug Lesson 6's tools exist
+> to catch. Getting the pointer's mutability right is *your* job, from first
+> principles, not the compiler's.
 
 > 🧭 **Side quest (Rust): `c_char` vs `u8`.** C's `char` maps to
-> `std::os::raw::c_char`, which is *not the same type* as Rust's `u8` even though
-> both are one byte. Why the ceremony? Because `char`'s signedness is
-> platform-defined in C, so Rust keeps it a distinct type to stop you assuming.
-> You'll likely need a cast somewhere — notice *where*, and know *why*.
+> `std::os::raw::c_char`, which is a *platform alias* — on x86-64 Linux it's
+> **`i8`** (signed), because C leaves `char`'s signedness up to the platform. Your
+> buffer is `[0u8; N]` (bytes are `u8`), so `u8` and `c_char` (`i8`) are different
+> types to the compiler even though both are one byte. That's why you'll cast the
+> buffer pointer somewhere — notice *where*, and know *why*.
 
 ### ✅ CHECKPOINT — does the declaration compile?
 ```sh
 cargo build -p portspy-proc
 ```
-A declaration produces no *output*, but it still has to be **syntactically
-honest**. A green build (an "unused function" warning is fine — you haven't
-called it yet) means your `extern` line is well-formed. That's a real payoff:
-your first hand-written bridge to C compiles.
+A declaration produces no *output*, but it still has to be valid Rust. A green
+build (an "unused function" warning is fine — you haven't called it yet) means
+your `extern` line is **well-formed Rust**. Note what it does *not* prove:
+compiling can't check your signature against C's real one — that ABI match (right
+pointer mutability, right types) is the manual check you did against the man page.
+Still, a first hand-written bridge to C that compiles is a real payoff.
 
 ---
 
@@ -166,16 +178,19 @@ is a common Rust gotcha and comes back in Lesson 5.)
 ```sh
 make print
 ```
-Does a hostname appear? It might have **junk or zeros after it** — that's
-expected, and it's Loop 5. If it *crashes* or is totally empty, jump to Stuck?.
+Does a hostname appear? It might have a **tail of zero bytes after it** (they may
+show as nothing or as `\0`) — that's expected, and it's Loop 5. If it *crashes* or
+is totally empty, jump to Stuck?.
 
 ---
 
 ## Loop 5 — Turn the buffer back into a real `String`
 
-C left you bytes with a **NUL byte** (`\0`) marking the end. Your buffer is 256
-bytes but the name might fill only the first 12; the rest is garbage. So "how
-long is the string?" is a real question you must answer — stop at the NUL.
+C wrote the name and terminated it with a **NUL byte** (`\0`). Your buffer is 256
+bytes but the name might fill only the first 12; the rest is the zero bytes you
+initialized it with (`[0u8; 256]`). Either way, "how long is the real string?" is
+a question you must answer — **stop at the first NUL** instead of treating all 256
+bytes as the name.
 
 You have two ways to do this — pick whichever you're comfortable with:
 

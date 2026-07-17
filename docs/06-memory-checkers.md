@@ -43,6 +43,10 @@ Valgrind runs your normal (debug) binary and blows the whistle on invalid
 reads/writes, use-after-free, and leaks — the exact failure mode if your Lesson 3
 buffer length or pointer was wrong.
 
+Run everything in this lesson **from the repo root** (if you're still inside
+`crates/portspy-model/` from Lesson 5, `cd ../..` first — otherwise
+`./target/debug/portspy` won't resolve and `make` won't find the Makefile).
+
 ### ✅ CHECKPOINT — install and run
 ```sh
 sudo apt install valgrind        # if you don't have it
@@ -68,8 +72,8 @@ re-run until it's clean.
 
 `portspy-wasm` has `unsafe` with no C: the raw-pointer handling lives in
 `dealloc` and in the `read_utf8` / `write_output` helpers. That's Miri's home
-turf. Miri needs a *test* to have something to run, so add a tiny one that drives
-the allocator round-trip:
+turf. Miri needs a *test* to have something to run. The cleanly host-testable
+part is the **allocator round-trip** — add a tiny test for it:
 
 ```rust
 #[cfg(test)]
@@ -90,12 +94,17 @@ mod tests {
 }
 ```
 
-> ⚠️ **Do NOT test `process` under Miri.** `process` packs its result as
-> `(len << 32) | ptr`, which assumes **32-bit wasm pointers**. Miri runs on your
-> **64-bit** host, where a real heap pointer needs all 64 bits — packing it into
-> 32 truncates it, and unpacking then frees a bogus address (real UB). That's a
-> quirk of the host, not a bug in your code, so keep the Miri test to
-> `alloc`/`dealloc`, whose `ptr`/`len` are passed as honest separate values.
+> ⚠️ **Don't try to round-trip `process` under Miri.** `process` packs its
+> result as `(len << 32) | ptr`, which assumes **32-bit wasm pointers**. Miri
+> runs on your **64-bit** host, where a real heap pointer needs all 64 bits, so
+> the packing *truncates* it — the returned pointer-half is garbage on the host.
+> `process` itself only packs and returns (the browser is what unpacks and
+> frees), but any host test that mimicked the browser — unpack, then `dealloc`
+> that pointer — would free a bogus address (real UB). So this is a wasm32-only
+> ABI, not something to host-test. The `read_utf8` / `write_output` helpers run
+> inside `process`, so on the host they're covered by the fuzzer (Lesson 5) and
+> Valgrind instead; Miri's clean win here is the `alloc`/`dealloc` round-trip,
+> whose `ptr`/`len` are honest separate values.
 
 ### ✅ CHECKPOINT
 ```sh

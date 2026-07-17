@@ -17,11 +17,17 @@ reading map at the bottom matters more.
 
 ## 1. What libc was actually doing
 
-In Lesson 3 you called `gethostname` from libc. But libc's `gethostname` is itself
-a thin wrapper: it puts a **syscall number** in a CPU register, puts your buffer's
-address in others, and runs one special instruction — `syscall` — that hands
-control to the **kernel**. The kernel fills your buffer and returns. libc is just
-a polite receptionist in front of that.
+In Lesson 3 you called `gethostname` from libc. Here's the twist: on Linux
+**there is no `gethostname` syscall.** libc's `gethostname` is a *library
+function* built on top of a different syscall — `uname`. When you call it, glibc
+puts the `uname` **syscall number** in a CPU register, puts a pointer to a
+`utsname` struct in another, runs one special instruction — `syscall` — which
+hands control to the **kernel**; the kernel fills the whole struct, and then glibc
+copies just the `nodename` field into your buffer. libc is a polite receptionist
+in front of that `syscall` instruction.
+
+So the stretch below doesn't re-create a "gethostname syscall" (there isn't one) —
+it re-creates the `uname` call that libc was making for you.
 
 > 🧭 **Side quest (concept): what *is* a system call?**
 > Your program runs in "user mode" and can't touch hardware or other processes
@@ -42,48 +48,66 @@ Those `openat("/proc/...")` lines are portspy talking to the kernel. (No
 
 ---
 
-## 2. Stretch: re-implement `gethostname` with a raw syscall
+Instead of calling libc, get the hostname from the kernel's `uname` — first the
+safe way, then (if you're brave) the raw-assembly way.
 
-Instead of calling libc, ask the kernel yourself. On Linux there's a syscall that
-returns host info; the classic route is the `uname` syscall (number `63` on
-x86-64), which fills a struct that includes the hostname (`nodename`).
+Both need the same struct. On Linux, `struct utsname` is **six fixed 65-byte
+`char` arrays** (`sysname`, `nodename`, `release`, `version`, `machine`, and a
+domainname field), one after another. Define it with `#[repr(C)]` — same idea as
+the pre-existing `Passwd` struct you read in `ffi.rs` in Lesson 3: a Rust struct
+laid out to match C's memory exactly. `nodename` is the hostname.
 
-This is where you finally touch **registers** and **inline assembly**. The shape,
-conceptually:
-- put the syscall number in the `rax` register,
-- put the pointer to your struct in `rdi`,
-- execute the `syscall` instruction,
-- read the result back out of `rax`.
+### Step A (recommended) — call the `uname` *libc function* via FFI
+This is the honest "one layer down" without any assembly, and it's testable:
 
-Rust exposes this via the `core::arch::asm!` macro. Your quest:
+1. Add `fn uname(buf: *mut Utsname) -> c_int;` to your `unsafe extern "C"` block
+   (same skill as `gethostname` in Lesson 3).
+2. Zero-initialize a `Utsname`, call `uname(&mut buf)` inside `unsafe`, check the
+   return (`0` = ok).
+3. Read `nodename`, stop at the first NUL, make a `String` (Lesson 3, Loop 5).
 
-1. **Side quest (asm) first** — read Rust's inline-assembly chapter of the
-   Reference (search "Rust inline assembly asm!") and skim the x86-64 syscall
-   calling convention (which register holds what). This is where you meet
-   registers hands-on for the first time — 30 minutes, and the `syscall` from §1
-   will feel *far* less magic.
-2. Define the `utsname` struct with `#[repr(C)]` — same idea as the pre-existing
-   `Passwd` struct you read in `ffi.rs` back in Lesson 3: a Rust struct laid out
-   to match C's memory layout exactly.
-3. Write a tiny `unsafe` block using `asm!` to invoke syscall `63` on a pointer to
-   your struct.
-4. Pull `nodename` out and NUL-terminate it into a `String` — same skill as
-   Lesson 3, Loop 5.
+That already teaches the `#[repr(C)]` struct + FFI. If you stop here, you've won.
 
-### ✅ CHECKPOINT (if you do the stretch)
-Add it behind a new subcommand or a `--raw` flag, and compare:
+### Step B (advanced) — do the `syscall` yourself with `asm!`
+This is where you finally touch **registers** and **inline assembly** via
+`core::arch::asm!`. It is genuinely tricky, so treat it as *guided reading you
+then attempt*, not copy-paste. The x86-64 Linux ABI has rules you **must** honor
+or the compiler will miscompile silently:
+
+- syscall **number 63** goes in `rax`; the struct pointer goes in `rdi`; run the
+  `syscall` instruction; the result comes back in `rax`.
+- the `syscall` instruction **destroys `rcx` and `r11`** — you must tell Rust with
+  `lateout("rcx") _` and `lateout("r11") _`, or it will assume those registers
+  survived and generate wrong code.
+- on error the kernel returns a **negative errno in `rax`** (e.g. `-14`), *not*
+  libc's `-1`-plus-`errno`. Check for negative.
+- zero-initialize the struct before the call.
+
+Read Rust's inline-assembly chapter of the Reference (search "Rust inline
+assembly asm!") and the x86-64 syscall calling convention before writing a line.
+Gate the whole thing behind `#[cfg(target_arch = "x86_64")]` — it only works
+there.
+
+> This is the one place in the course where, if it feels like too much, **the
+> right move is Step A.** Nobody ships hand-rolled syscall asm for a hostname; the
+> point is to *see the mechanism* once.
+
+### ✅ CHECKPOINT
+Wire your new function into a `hostname` subcommand in `main.rs` (like `print` /
+`serve`), so you have a concrete thing to run. Then **rebuild** (don't trust the
+old binary) and compare against the system's own answer:
 ```sh
-./target/release/portspy print          # libc hostname
-# your raw-syscall version                # should be identical
-hostname                                  # the system's answer
+cargo build --release -p portspy-cli
+./target/release/portspy hostname     # your uname-based value
+hostname                              # the system's answer
 ```
-All three match = you just talked to the kernel with no C library in between,
-using assembly you wrote. That's about as deep as this stack goes from user space.
+They match = you got the hostname straight from the kernel's `uname`, with (Step
+B) assembly you wrote and no C library in the middle. That's about as deep as this
+stack goes from user space.
 
-> ⚠️ Inline asm is `unsafe` and architecture-specific — this only works on
-> x86-64 Linux. That's fine; the *point* is seeing the mechanism, not shipping it.
-> And run it under **Valgrind** (Lesson 6) — raw memory + asm is exactly what it's
-> for.
+> ⚠️ Step B's inline asm is `unsafe` and x86-64-only. Run it under **Valgrind**
+> (Lesson 6) — raw memory + a hand-written syscall is exactly what Valgrind is
+> for — and gate it with `#[cfg(target_arch = "x86_64")]`.
 
 > 🆘 **Too much?** Totally reasonable to stop before the asm. An easier middle
 > step: call the `uname` **libc** function (no asm) via FFI — same struct, same
