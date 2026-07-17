@@ -99,6 +99,7 @@ fn decode_ipv4(ip_hex: &str) -> String {
     for i in 0..4 {
         let start = i * 2;
         let byte_hex = &ip_hex[start..start + 2];
+        //Do we want to unwrop
         bytes[i] = u8::from_str_radix(byte_hex, 16).unwrap_or(0);
     }
 

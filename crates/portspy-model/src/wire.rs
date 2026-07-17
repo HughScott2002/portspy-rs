@@ -135,28 +135,106 @@ fn parse_i32(text: &str) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*; // pull in everything from this file, including private fns
-    // fn test_encode() {
-    //     let record = Record {
-    //         proto: "tcp".to_string(),
-    //         addr: "127.0.0.54".to_string(),
-    //         port: parse_u16("43"),
-    //         state: "active".to_string(),
-    //         pid: parse_i32("2039"),
-    //         process: "".to_string(),
-    //         user: "root".to_string(),
-    //         cmd: "asd".to_string(),
-    //     };
-    //     assert_eq!(record, "")
-    // }
 
     #[test]
-    fn test_decode() {
-        assert_eq!(decode(""), vec![])
+    fn test_encode() {
+        //Declare the test vars for both sides of the assertion
+        let proto: String = String::from("tpc");
+        let addr: String = String::from("128.0.0.54");
+        let port: String = String::from("43");
+        let state: String = String::from("active");
+        let pid: String = String::from("2093");
+        let process: String = String::from("");
+        let user: String = String::from("jr");
+        let cmd: String = String::from("asd");
+
+        let result_string: String =
+            format!("{proto}\t{addr}\t{port}\t{state}\t{pid}\t{process}\t{user}\t{cmd}");
+
+        let populated_record: Record = Record {
+            proto,
+            addr,
+            port: parse_u16(&port),
+            state,
+            pid: parse_i32(&pid),
+            process,
+            user,
+            cmd,
+        };
+        let unpopulated_record: Record = Record {
+            proto: "".to_string(),
+            addr: "".to_string(),
+            port: parse_u16(""),
+            state: "".to_string(),
+            pid: parse_i32(""),
+            process: "".to_string(),
+            user: "".to_string(),
+            cmd: "".to_string(),
+        };
+
+        assert_eq!(encode(&[populated_record]), result_string);
+        assert_eq!(encode(&[unpopulated_record]), "\t\t0\t\t0\t\t\t");
+    }
+
+    #[test]
+    fn decode_ignores_empty_input() {
+        assert!(decode("").is_empty());
+    }
+
+    #[test]
+    fn decode_skips_lines_with_wrong_field_count() {
+        let malformed = "tcp\t127.0.0.1\t43";
+
+        assert!(decode(malformed).is_empty());
+    }
+
+    #[test]
+    fn decode_accepts_empty_fields() {
+        let input = "\t\t0\t\t0\t\t\t";
+        let expected = Record {
+            proto: "".to_string(),
+            addr: "".to_string(),
+            port: 0,
+            state: "".to_string(),
+            pid: 0,
+            process: "".to_string(),
+            user: "".to_string(),
+            cmd: "".to_string(),
+        };
+
+        assert_eq!(decode(input), vec![expected]);
+    }
+
+    #[test]
+    fn decode_parses_a_well_formed_line() {
+        let input = "tcp\t127.0.0.1\t43\tLISTEN\t2093\tnode\tjr\tasd";
+        let expected = Record {
+            proto: "tcp".to_string(),
+            addr: "127.0.0.1".to_string(),
+            port: 43,
+            state: "LISTEN".to_string(),
+            pid: 2093,
+            process: "node".to_string(),
+            user: "jr".to_string(),
+            cmd: "asd".to_string(),
+        };
+
+        assert_eq!(decode(input), vec![expected]);
     }
 
     #[test]
     fn test_parse_i32() {
         assert_eq!(parse_i32("2"), 2);
         assert_eq!(parse_i32("-2"), -2);
+    }
+
+    #[test]
+    fn test_parse_u16() {
+        assert_eq!(parse_u16("2"), 2);
+        assert_eq!(parse_u16("-10"), 0);
+        assert_eq!(parse_u16("awdiu"), 0);
+        assert_eq!(parse_u16("9012890218228323089"), 0);
+        assert_eq!(parse_u16("0"), 0);
+        assert_eq!(parse_u16(""), 0);
     }
 }
