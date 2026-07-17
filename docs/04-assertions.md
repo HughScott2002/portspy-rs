@@ -88,13 +88,21 @@ well but has **zero assertions**. Add them:
 
 ### The one real bug to fix (not just an assert)
 `handle_connection` *assumes* the whole HTTP request arrives in a single `read`
-(there's a comment admitting it). A slow client could split `GET /glue` and
-`.js HTTP/1.1` across two packets, and the second half would be silently
-mis-routed to `/`. TigerStyle: **assert your assumptions or handle them.** Pick:
-- **Enforce:** after reading, check the buffer actually contains a full request
-  line (a `\r\n`). If not, respond `400 Bad Request` instead of guessing.
-- **Handle:** loop the read until you see `\r\n` or hit `MAX_REQUEST_BYTES`, then
-  `400`. More correct, a little more code.
+(there's a comment admitting it). A slow client could split the request across
+two packets, so `read` returns only `GET /glue` — and `request_path` then hands
+back a *truncated* path (`/glue`), which 404s; if the packet were cut even
+earlier (before the path), it falls back to `/` and serves the wrong page. Either
+way you acted on half a request. TigerStyle: **assert your assumptions or handle
+them.** Pick:
+- **Enforce (easier):** after reading, check the buffer actually contains a full
+  request line (a `\r\n`). If not, send a 400 — you already have the helper, just
+  call it:
+  ```rust
+  respond(&mut stream, "400 Bad Request", "text/plain; charset=utf-8", b"bad request")
+  ```
+- **Handle (harder, optional):** loop the read, appending into the buffer until
+  you see `\r\n` or hit `MAX_REQUEST_BYTES`, then 400. More correct, more code —
+  do this only if you're enjoying it.
 
 Either is fine for a local tool; the point is to stop *pretending* it always
 holds.
@@ -128,6 +136,8 @@ server should handle it without panicking. `Ctrl-C` to stop.
 - Not sure if something should be `assert!` or an `if` return? Re-read the "Key
   distinction" box. Rule of thumb: *could a correct outside world cause this?* If
   yes → `if`/return. If only *my* bug could → `assert!`.
+- `nc` not installed for the checkpoint? `sudo apt install netcat-openbsd` — or
+  just skip that one; `curl` already proves the happy path.
 - Release build behavior: note this repo uses `panic = "abort"`, so a failed
   `assert!` in a release build aborts the process immediately. That's intended.
 

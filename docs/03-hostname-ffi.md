@@ -31,6 +31,9 @@ portspy · <hostname-goes-here> · <user>
 ```
 
 Put a literal string like `"todo-hostname"` where the hostname will go.
+Hardcode the `<user>` half too for now (just type your username, or drop that
+part entirely) — wiring the *real* logged-in user is an optional extension at the
+end of the lesson. This lesson is only about the hostname.
 
 ### ✅ CHECKPOINT
 ```sh
@@ -88,8 +91,10 @@ same `unsafe extern "C"` block. Two translation puzzles:
 - `char *name`: is that pointer `*const u8`/`*const c_char` or `*mut ...`? Ask
   yourself **who writes through it** — you, or C? (This is *the* decision of the
   lesson. Get it wrong and the compiler will tell you.)
-- `size_t`: which Rust integer is "an unsigned, pointer-sized length"? You've
-  already used it in this project for lengths — grep for it.
+- `size_t`: the Rust type for "an unsigned, pointer-sized length" is **`usize`**
+  — the same one `portspy-wasm`'s `alloc(len: usize)` uses. Use that. (The *why*
+  — that it's sized to the machine's pointer width — is the thing worth
+  understanding; the answer is just `usize`.)
 
 > ⚠️ **Trap — `*const` vs `*mut`.** `*const` = "I promise only to read through
 > this." `*mut` = "I may write through this." C *writes* the hostname into your
@@ -102,7 +107,14 @@ same `unsafe extern "C"` block. Two translation puzzles:
 > platform-defined in C, so Rust keeps it a distinct type to stop you assuming.
 > You'll likely need a cast somewhere — notice *where*, and know *why*.
 
-There's nothing to run yet — declarations produce no output. On to the buffer.
+### ✅ CHECKPOINT — does the declaration compile?
+```sh
+cargo build -p portspy-proc
+```
+A declaration produces no *output*, but it still has to be **syntactically
+honest**. A green build (an "unused function" warning is fine — you haven't
+called it yet) means your `extern` line is well-formed. That's a real payoff:
+your first hand-written bridge to C compiles.
 
 ---
 
@@ -121,7 +133,34 @@ a pointer to it.
    say `-1` means? Handle it (return an empty string, say) rather than reading a
    buffer C never filled.
 
-Wire the result into the header from Loop 1, replacing `"todo-hostname"`.
+> 🧭 **Side quest (Rust): handing C a buffer you own.** This mechanic is new —
+> the existing `getpwuid` code never does it (libc handed *it* a pointer; here
+> *you* provide one). The shape:
+> ```rust
+> let mut buffer = [0u8; HOSTNAME_MAX];   // N writable bytes on the stack
+> let pointer = buffer.as_mut_ptr();      // *mut u8 = address of the first byte
+> ```
+> `buffer.as_mut_ptr()` is the scratchpad address you lend C. It's a `*mut u8`,
+> but your `extern` declares the parameter as `*mut c_char`, so you'll cast:
+> `pointer as *mut c_char`. (That's the `c_char` vs `u8` bump from Loop 3, now in
+> practice.) The `unsafe` call then looks like
+> `gethostname(buffer.as_mut_ptr() as *mut c_char, buffer.len())`.
+
+Now wire it into the header. Two small steps, because of how Rust modules work:
+
+1. Your `hostname()` lives in the **private** `ffi` module (`mod ffi;` in
+   `crates/portspy-proc/src/lib.rs`), so marking the function `pub` isn't enough
+   — the module hides it. Open that `lib.rs` and add a line right next to the
+   existing `pub use ffi::is_root;`:
+   ```rust
+   pub use ffi::hostname;
+   ```
+   Now `portspy_proc::hostname()` exists.
+2. In `run_print` (`main.rs`), replace the `"todo-hostname"` placeholder with a
+   call to `portspy_proc::hostname()`.
+
+(That module-visibility rule — `pub` function still hidden by a private module —
+is a common Rust gotcha and comes back in Lesson 5.)
 
 ### ✅ CHECKPOINT
 ```sh
@@ -138,9 +177,20 @@ C left you bytes with a **NUL byte** (`\0`) marking the end. Your buffer is 256
 bytes but the name might fill only the first 12; the rest is garbage. So "how
 long is the string?" is a real question you must answer — stop at the NUL.
 
-Good news: you've **already seen** the tool for "raw bytes ending in NUL → Rust
-string." Look at how `username_for_uid` in `ffi.rs` turns libc's C string into a
-Rust `String`. Reuse that idea.
+You have two ways to do this — pick whichever you're comfortable with:
+
+- **(a) The plain-Rust way (recommended for a first time — no extra `unsafe`).**
+  Find the first NUL byte, then take everything before it:
+  ```rust
+  let end = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
+  let name = String::from_utf8_lossy(&buffer[..end]).into_owned();
+  ```
+  `position(...)` gives you the index of the first `0`; `&buffer[..end]` is the
+  real bytes; `from_utf8_lossy` turns them into a `String`.
+- **(b) The C-string way (reuses what you saw).** `username_for_uid` in `ffi.rs`
+  uses `CStr::from_ptr(...)` to read a NUL-terminated C string. You can do the
+  same with `CStr::from_ptr(buffer.as_ptr() as *const c_char)` — but note that's
+  *another* `unsafe` pointer cast, which is why (a) is the gentler first pass.
 
 ### ✅ CHECKPOINT — the real thing, verified
 ```sh
@@ -160,8 +210,9 @@ officially called C by hand. 🎉
 
 You built a safety net in Lesson 2; use it.
 
-- Expose a small safe function (like `is_root` / `username_for_uid` already are)
-  — the `unsafe` stays *inside* it, callers see a clean `fn hostname() -> String`.
+- Confirm the shape is clean: `pub fn hostname() -> String` with the `unsafe`
+  *inside* it, so callers see no unsafe at all. (You already exposed it via
+  `pub use ffi::hostname;` in Loop 4.)
 - Add a `const` for the buffer size with a comment on *why* that size.
 - Write a test: assert `hostname()` is **non-empty** on a normal machine. (You
   can't assert the exact value — it's machine-specific — but "non-empty and no

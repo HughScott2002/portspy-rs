@@ -79,9 +79,11 @@ cargo --version     # cargo 1.9x
 make --version      # GNU Make ...
 ```
 
-Then, from the repo root, prove the app builds and runs:
+Then install the one extra compile target the browser dashboard needs (once),
+and prove the app builds and runs:
 
 ```sh
+make setup     # one-time: installs the wasm32 target used by `make serve`
 make print
 ```
 

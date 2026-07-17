@@ -66,20 +66,46 @@ re-run until it's clean.
 
 ## 3. Loop 2 — Miri on the pure-Rust unsafe (the wasm crate)
 
-`portspy-wasm` has `unsafe` with no C: raw pointer math in `alloc`/`dealloc`/
-`process`. That's Miri's home turf. Miri needs a *test* to have something to
-simulate, so add a tiny one that drives the boundary functions (allocate, write
-some bytes, process, read back, deallocate) if there isn't one.
+`portspy-wasm` has `unsafe` with no C: the raw-pointer handling lives in
+`dealloc` and in the `read_utf8` / `write_output` helpers. That's Miri's home
+turf. Miri needs a *test* to have something to run, so add a tiny one that drives
+the allocator round-trip:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alloc_then_dealloc_roundtrips() {
+        let len = 8;
+        let ptr = alloc(len);
+        // write into the buffer we were handed, then give it back
+        unsafe {
+            let bytes = std::slice::from_raw_parts_mut(ptr, len);
+            bytes.fill(0);
+        }
+        dealloc(ptr, len);   // Miri verifies this frees exactly what alloc made
+    }
+}
+```
+
+> ⚠️ **Do NOT test `process` under Miri.** `process` packs its result as
+> `(len << 32) | ptr`, which assumes **32-bit wasm pointers**. Miri runs on your
+> **64-bit** host, where a real heap pointer needs all 64 bits — packing it into
+> 32 truncates it, and unpacking then frees a bogus address (real UB). That's a
+> quirk of the host, not a bug in your code, so keep the Miri test to
+> `alloc`/`dealloc`, whose `ptr`/`len` are passed as honest separate values.
 
 ### ✅ CHECKPOINT
 ```sh
 rustup +nightly component add miri     # one-time
 cargo +nightly miri test -p portspy-wasm
 ```
-A clean pass means Miri found no undefined behavior in your pointer handling. If
-it prints something like "out-of-bounds pointer arithmetic" or "using
-uninitialized memory," it's pointing straight at a real UB bug — with a stack
-trace. Fix and re-run.
+A clean pass means Miri found no undefined behavior in the allocator's pointer
+handling. If it prints something like "out-of-bounds pointer arithmetic" or
+"using uninitialized memory," it's pointing straight at a real UB bug — with a
+stack trace. Fix and re-run.
 
 > 🆘 If the pinned nightly lacks the `miri` component, install a fresh one:
 > `rustup toolchain install nightly --component miri`, then use

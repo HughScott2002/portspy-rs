@@ -59,10 +59,12 @@ Rust exposes this via the `core::arch::asm!` macro. Your quest:
 
 1. **Side quest (asm) first** — read Rust's inline-assembly chapter of the
    Reference (search "Rust inline assembly asm!") and skim the x86-64 syscall
-   calling convention (which register holds what). 30 minutes, and it'll feel
-   *far* less magic afterward — you already met registers conceptually in Lesson 7.
-2. Define the `utsname` struct with `#[repr(C)]` (like you did for `Passwd` in
-   Lesson 3 — same idea: match C's memory layout).
+   calling convention (which register holds what). This is where you meet
+   registers hands-on for the first time — 30 minutes, and the `syscall` from §1
+   will feel *far* less magic.
+2. Define the `utsname` struct with `#[repr(C)]` — same idea as the pre-existing
+   `Passwd` struct you read in `ffi.rs` back in Lesson 3: a Rust struct laid out
+   to match C's memory layout exactly.
 3. Write a tiny `unsafe` block using `asm!` to invoke syscall `63` on a pointer to
    your struct.
 4. Pull `nodename` out and NUL-terminate it into a `String` — same skill as

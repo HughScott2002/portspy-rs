@@ -138,8 +138,9 @@ Lesson 5. You're planting the seed now.
   `mod tests`.
 - Test won't compile because of a private field/function → it's likely in a
   *different* file than your test; move the test into the file that defines it.
-- `assert_eq!` won't compile on a `Record` → derive `PartialEq` (and `Debug`, so
-  failures print) on the struct.
+- `assert_eq!` won't compile on a `Record` → add `PartialEq` to the derive line
+  it already has (`#[derive(Clone, Debug)]` → `#[derive(Clone, Debug, PartialEq)]`).
+  It already derives `Debug`, so don't add a second one — that's a compile error.
 
 ## Commit it
 ```sh

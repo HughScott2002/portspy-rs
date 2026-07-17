@@ -133,6 +133,10 @@ calling `getpwuid` is just a jump to that address.
       `U getpwuid` vs `T getpwuid` means.
 
 ## 🆘 Stuck?
+- **`make serve` says the wasm target "may not be installed"?** Run `make setup`
+  once (it does `rustup target add wasm32-unknown-unknown`), then retry. The
+  dashboard is compiled to WebAssembly, and that target isn't installed by
+  default.
 - `ldd`/`nm` not found? They're in `binutils` — `sudo apt install binutils`.
 - `nm` prints nothing for libc? Your libc path may differ; run
   `ldd target/release/portspy` and use whatever path it prints for `libc.so`.

@@ -43,10 +43,17 @@ input, and you have several such parsers: `wire::decode`, `net_tcp::parse_listen
 ```sh
 cargo install cargo-fuzz          # one-time
 rustup toolchain install nightly  # libFuzzer needs nightly
-cargo fuzz init                    # creates a fuzz/ crate in the workspace
+cd crates/portspy-model           # attach the fuzzer to ONE crate (see note)
+cargo fuzz init                   # creates crates/portspy-model/fuzz/
 ```
-You should now have a `fuzz/` directory. `cargo fuzz list` prints the (empty or
-sample) target list without error.
+**Important:** our repo *root* is a virtual workspace (no root package), so
+`cargo fuzz init` has nothing to attach to there and will fail. You must run it
+*inside a member crate*. `portspy-model` is the right home — its `wire`/`view`
+functions are public and eat untrusted text. **From here on, run every
+`cargo fuzz ...` command from inside `crates/portspy-model/`.**
+
+You should now have `crates/portspy-model/fuzz/`, and `cargo fuzz list` prints
+the target list without error.
 
 > 🆘 If `cargo install cargo-fuzz` fails to build, you may need LLVM/clang
 > installed (`sudo apt install clang`). libFuzzer ships with the Rust nightly
@@ -59,7 +66,7 @@ sample) target list without error.
 A **fuzz target** is a function handed a slice of random bytes; you feed them into
 the code under test. The goal is simply: **never crash, no matter the input.**
 
-Create a target:
+Create a target (from inside `crates/portspy-model/`):
 ```sh
 cargo fuzz add decode_wire
 ```
@@ -76,8 +83,8 @@ fuzz_target!(|data: &[u8]| {
     }
 });
 ```
-(You'll add `portspy-model` to `fuzz/Cargo.toml`'s dependencies — the scaffold
-shows where.)
+(`cargo fuzz init` already added `portspy-model` as a dependency of the fuzz
+crate, so `portspy_model::wire::decode` just works — no edit needed.)
 
 ### ✅ CHECKPOINT — the counter
 ```sh
@@ -111,18 +118,30 @@ found a real inconsistency in your format — exactly what you want to know.
 
 ## 5. Loop 3 — aim at the sharp edges
 
-Add a target for `parse_listening` (feed it random text as fake `/proc` lines).
+The juiciest target is `parse_listening` (feed it random text as fake `/proc`
+lines). It lives in a *different* crate, `portspy-proc`, and in a **private**
+module — so two setup steps first (this reuses the re-export trick from Lesson 3):
+
+1. Expose it: in `crates/portspy-proc/src/lib.rs`, add
+   `pub use net_tcp::parse_listening;` (next to `pub use ffi::...`). Now
+   `portspy_proc::parse_listening` is callable.
+2. Let the fuzz crate depend on it: in `crates/portspy-model/fuzz/Cargo.toml`
+   under `[dependencies]`, add `portspy-proc = { path = "../../portspy-proc" }`.
+
+Then `cargo fuzz add parse_tcp` and call `portspy_proc::parse_listening(text, false)`
+in the target.
+
 These spots are worth aiming at — treat them as "does the fuzzer catch this?"
 challenges:
 
 - **`decode_ipv4`'s fixed-length indexing** (`net_tcp.rs`): it checks
-  `len() == 8`, then slices `[start..start+2]`. Is every code path that indexes
-  actually guarded by a length check? Point the fuzzer at `parse_listening` and
-  see if any slice panics.
+  `len() != 8` then slices `[start..start+2]`. Is every indexing path actually
+  guarded? `decode_ipv4` is *private*, but `parse_listening` calls it — so
+  fuzzing `parse_listening` exercises it **for free**. See if any slice panics.
 - **The 8-column assumption** in `wire::decode`: lines with 7 or 9 tabs should be
-  skipped cleanly.
-- **`request_path`** (in `portspy-http`): a request with no spaces, a lone `\r`,
-  or empty input.
+  skipped cleanly (this one's already covered by your `decode_wire` target).
+- **`request_path`** (in `portspy-http`) is another good target, but it's a
+  private fn — you'd expose it the same way first. Optional; save it for later.
 
 > If the fuzzer finds **nothing** after a good run, that's a genuine result too —
 > a cheap proof that path is robust. "No bug found" is information, not failure.
@@ -146,10 +165,15 @@ it once; the test stops it coming back.
       have a clean run and understand that's a real result.
 
 ## 🆘 Stuck?
+- `cargo fuzz init` fails at the repo root → that's expected (virtual
+  workspace). `cd crates/portspy-model` first, then run it. Run all later
+  `cargo fuzz` commands from there too.
 - `cargo fuzz` "requires nightly" → it invokes nightly itself; make sure
   `rustup toolchain install nightly` succeeded.
-- Target can't find `portspy_model` → add it under `[dependencies]` in
-  `fuzz/Cargo.toml` with a `path = "../crates/portspy-model"`.
+- Target can't find `portspy_model` → it should be auto-added by `init`; if not,
+  add `portspy-model = { path = ".." }` under `[dependencies]` in
+  `crates/portspy-model/fuzz/Cargo.toml` (the fuzz crate sits one level *inside*
+  portspy-model, so the path is just `..`).
 - Runs but 0 exec/s / hangs immediately → your target is probably doing I/O or an
   infinite loop; keep the target body tiny and pure (parse only).
 
