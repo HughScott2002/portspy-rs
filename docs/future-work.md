@@ -2,6 +2,13 @@
 
 Ideas parked for later. Not built yet.
 
+Related task/learning docs:
+- [tigerstyle-assertions.md](./tigerstyle-assertions.md) — harden the server
+  with assertions.
+- [testing-and-fuzzing.md](./testing-and-fuzzing.md) — learn `cargo test` and
+  `cargo-fuzz` against portspy's parsers.
+- [hostname-feature.md](./hostname-feature.md) — the guided FFI exercise.
+
 ## Memory-checking Make targets (`make valgrind` / `make miri`)
 
 When we write `unsafe`, we switch off Rust's built-in referee. These two tools
