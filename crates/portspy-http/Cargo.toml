@@ -1,0 +1,14 @@
+[package]
+name = "portspy-http"
+version.workspace = true
+edition.workspace = true
+
+# A tiny, dependency-free web server built on std::net. It serves the browser
+# dashboard (static files) and one data endpoint (/api/ports). Native only.
+
+[dependencies]
+portspy-model = { path = "../portspy-model" }
+portspy-proc = { path = "../portspy-proc" }
+
+[lib]
+path = "src/lib.rs"

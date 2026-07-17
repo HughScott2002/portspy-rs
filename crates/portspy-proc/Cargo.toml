@@ -1,0 +1,13 @@
+[package]
+name = "portspy-proc"
+version.workspace = true
+edition.workspace = true
+
+# Native-only crate: it reads Linux /proc files and calls into the C library.
+# It is never compiled for wasm. Its whole job is to produce a Vec<Record>.
+
+[dependencies]
+portspy-model = { path = "../portspy-model" }
+
+[lib]
+path = "src/lib.rs"

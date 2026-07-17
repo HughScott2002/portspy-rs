@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>portspy</title>
+    <style>
+      /* Plain, readable styling. No frameworks, no build step. */
+      :root {
+        color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #171a21;
+        --line: #262b36;
+        --text: #e6e9ef;
+        --muted: #8b93a7;
+        --accent: #6ea8fe;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Consolas,
+          monospace;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      p.sub {
+        margin: 0 0 20px;
+        color: var(--muted);
+      }
+      .controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      input[type="search"] {
+        flex: 1;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        color: var(--text);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font: inherit;
+      }
+      button {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        color: var(--text);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+        font-weight: 600;
+      }
+      th:hover {
+        color: var(--accent);
+      }
+      tbody tr:hover {
+        background: var(--panel);
+      }
+      tbody tr {
+        cursor: pointer;
+      }
+      td.cmd {
+        color: var(--muted);
+        max-width: 480px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .hint {
+        color: var(--muted);
+        margin-top: 16px;
+        font-size: 12px;
+      }
+      .flash {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>portspy</h1>
+    <p class="sub">
+      listening TCP ports on this machine — read natively from
+      <code>/proc</code>, sorted &amp; filtered in WebAssembly.
+    </p>
+
+    <div class="controls">
+      <input
+        id="search"
+        type="search"
+        placeholder="filter by port, process, user…"
+      />
+      <button id="refresh">refresh</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <!-- data-key maps a column to the SortKey integer the wasm expects -->
+          <th data-key="0">port</th>
+          <th data-key="2">process</th>
+          <th data-key="1">pid</th>
+          <th data-key="3">user</th>
+          <th>proto</th>
+          <th>address</th>
+          <th>command</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <p class="hint" id="hint">
+      click a row to copy its kill command · click a header to sort
+    </p>
+
+    <script src="/glue.js"></script>
+  </body>
+</html>

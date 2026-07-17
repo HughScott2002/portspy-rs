@@ -1,0 +1,18 @@
+[package]
+name = "portspy-wasm"
+version.workspace = true
+edition.workspace = true
+
+# Compiled to wasm32-unknown-unknown and loaded by the browser. It exposes a
+# tiny C-style interface (alloc / process / dealloc) so plain JavaScript can
+# hand it the port list and get back a sorted, filtered port list -- using the
+# EXACT same portspy-model code the native binary uses.
+
+[dependencies]
+portspy-model = { path = "../portspy-model" }
+
+[lib]
+# cdylib = produce a single loadable module (a .wasm file) with no Rust-specific
+# metadata. This is what the browser can instantiate.
+crate-type = ["cdylib"]
+path = "src/lib.rs"

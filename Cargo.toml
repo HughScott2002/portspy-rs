@@ -1,0 +1,31 @@
+# Workspace root.
+#
+# This is a "virtual" workspace: it owns no code itself, it only groups the
+# member crates below. Each crate has ONE job. Data flows left-to-right:
+#
+#   portspy-proc  (reads the OS)  ->  portspy-model (shared shapes/wire format)
+#   portspy-http  (serves it)     ->  portspy-model
+#   portspy-cli   (the binary)    ->  proc + http + model
+#   portspy-wasm  (browser logic) ->  model            [compiled to wasm32]
+#
+# portspy-model is the ONLY crate shared by both the native binary and the
+# WebAssembly module. That shared crate is the whole point of the demo.
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/portspy-model",
+    "crates/portspy-proc",
+    "crates/portspy-http",
+    "crates/portspy-cli",
+    "crates/portspy-wasm",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+# Abort on panic instead of unwinding. Smaller, simpler, and it is what we want
+# for the wasm module (no unwinding machinery in the browser).
+[profile.release]
+panic = "abort"

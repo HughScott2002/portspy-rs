@@ -1,0 +1,11 @@
+[package]
+name = "portspy-model"
+version.workspace = true
+edition.workspace = true
+
+# No dependencies. This crate is pure data + logic so it can compile for BOTH
+# the native target and wasm32. It must never touch the filesystem, network,
+# or the clock, because none of those exist inside the browser sandbox.
+
+[lib]
+path = "src/lib.rs"

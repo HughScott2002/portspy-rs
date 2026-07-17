@@ -1,0 +1,17 @@
+[package]
+name = "portspy-cli"
+version.workspace = true
+edition.workspace = true
+
+# The native binary. It wires the other crates together and owns all of the
+# terminal presentation (argument parsing + the ASCII table).
+
+[dependencies]
+portspy-model = { path = "../portspy-model" }
+portspy-proc = { path = "../portspy-proc" }
+portspy-http = { path = "../portspy-http" }
+
+# Produce a binary literally called `portspy` (nicer than "portspy-cli").
+[[bin]]
+name = "portspy"
+path = "src/main.rs"
