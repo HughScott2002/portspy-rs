@@ -60,7 +60,7 @@ pub fn encode(records: &[Record]) -> String {
 /// Data flow: one String  ->  `Vec<Record>`. Lines that do not have exactly
 /// FIELD_COUNT columns are skipped rather than trusted.
 pub fn decode(text: &str) -> Vec<Record> {
-    let mut records = Vec::new();
+    let mut records: Vec<Record> = Vec::new();
 
     for line in text.split(RECORD_SEPARATOR) {
         // An empty line carries no record; ignore it.
@@ -129,5 +129,34 @@ fn parse_i32(text: &str) -> i32 {
     match text.parse::<i32>() {
         Ok(value) => value,
         Err(_) => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*; // pull in everything from this file, including private fns
+    // fn test_encode() {
+    //     let record = Record {
+    //         proto: "tcp".to_string(),
+    //         addr: "127.0.0.54".to_string(),
+    //         port: parse_u16("43"),
+    //         state: "active".to_string(),
+    //         pid: parse_i32("2039"),
+    //         process: "".to_string(),
+    //         user: "root".to_string(),
+    //         cmd: "asd".to_string(),
+    //     };
+    //     assert_eq!(record, "")
+    // }
+
+    #[test]
+    fn test_decode() {
+        assert_eq!(decode(""), vec![])
+    }
+
+    #[test]
+    fn test_parse_i32() {
+        assert_eq!(parse_i32("2"), 2);
+        assert_eq!(parse_i32("-2"), -2);
     }
 }

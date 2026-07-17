@@ -16,7 +16,7 @@ pub const PID_UNKNOWN: i32 = 0;
 ///
 /// Every field is owned (`String`, not `&str`) so a `Record` is completely
 /// self-contained and easy to pass around, store, and reason about.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Record {
     /// "tcp" for IPv4, "tcp6" for IPv6.
     pub proto: String,
